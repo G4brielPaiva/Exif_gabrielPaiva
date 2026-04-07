@@ -1,0 +1,137 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId} (matches request.auth.uid)
+// Fields:
+//   - uid: string (required) - Firebase Auth UID
+//   - displayName: string (optional) - User's name
+//   - email: string (required) - User's email
+//   - photoURL: string (optional) - Profile picture URL
+//   - createdAt: timestamp (required) - Account creation time
+//   - lastLogin: timestamp (required) - Last login time
+//
+// Collection: reports
+// Document ID: {reportId} (unique report ID)
+// Fields:
+//   - uid: string (required) - Owner UID
+//   - reportId: string (required) - Unique report ID
+//   - fileName: string (required) - Name of the analyzed file
+//   - fileSize: string (required) - Formatted file size
+//   - fileType: string (required) - MIME type
+//   - createdAt: timestamp (required) - Analysis timestamp
+//   - metadata: map (required) - Grouped metadata tags
+//   - shootingSummary: map (optional) - ISO, F-Number, etc.
+//   - location: map (optional) - Latitude, Longitude, Altitude
+//   - thumbnailUrl: string (optional) - URL to stored thumbnail
+//   - isPublic: bool (required) - Visibility flag
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "gabriel.aluno321@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'displayName', 'email', 'photoURL', 'createdAt', 'lastLogin', 'role']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.createdAt is timestamp &&
+             data.lastLogin is timestamp;
+    }
+
+    function isValidReport(data) {
+      return hasOnlyAllowedFields(['uid', 'reportId', 'fileName', 'fileSize', 'fileType', 'createdAt', 'metadata', 'shootingSummary', 'location', 'thumbnailUrl', 'isPublic']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.reportId is string && data.reportId.size() > 0 &&
+             data.fileName is string && data.fileName.size() > 0 && data.fileName.size() < 255 &&
+             data.isPublic is bool &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Users can only read their own profile (contains email/PII)
+      allow read: if isOwner(userId) || isAdmin();
+      
+      allow create: if isOwner(userId) && 
+                      isValidUser(request.resource.data) && 
+                      (!('role' in request.resource.data) || request.resource.data.role == 'user' || isAdmin());
+                      
+      allow update: if isOwner(userId) && 
+                      isValidUser(request.resource.data) && 
+                      (request.resource.data.role == resource.data.role || isAdmin()) &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /reports/{reportId} {
+      // Public reports can be read by anyone, private ones only by owner
+      allow read: if resource.data.isPublic == true || isDocOwner() || isAdmin();
+      
+      allow create: if isAuthenticated() && 
+                      isValidReport(request.resource.data) && 
+                      request.resource.data.uid == request.auth.uid;
+                      
+      allow update: if isDocOwner() && 
+                      isValidReport(request.resource.data) && 
+                      uidNotModified() &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+                      
+      allow delete: if isDocOwner() || isAdmin();
+    }
+  }
+}

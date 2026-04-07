@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user preferences and basic profile info.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoURL": { "type": "string", "format": "uri" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLogin": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "AnalysisReport": {
+      "title": "Analysis Report",
+      "description": "Metadata analysis results saved by the user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Owner UID" },
+        "reportId": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileSize": { "type": "string" },
+        "fileType": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "metadata": { "type": "object", "description": "The extracted metadata groups" },
+        "shootingSummary": { "type": "object" },
+        "location": { "type": "object" },
+        "thumbnailUrl": { "type": "string", "format": "uri" },
+        "isPublic": { "type": "boolean", "description": "Whether the report is shared publicly" }
+      },
+      "required": ["uid", "reportId", "fileName", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile documents"
+    },
+    "/reports/{reportId}": {
+      "schema": "AnalysisReport",
+      "description": "Saved metadata analysis reports"
+    }
+  }
+}

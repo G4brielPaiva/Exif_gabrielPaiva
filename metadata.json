@@ -1,0 +1,5 @@
+{
+  "name": "ExifInfo Engine - Forensic Metadata Architect",
+  "description": "Professional OSINT engine for deep metadata extraction and forensic analysis. Zero-persistence processing.",
+  "requestFramePermissions": []
+}
